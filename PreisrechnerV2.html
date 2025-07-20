@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Preisrechner EUR ↔ CHF / MwSt.</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+ :root {
+   --pad: 0.5rem;
+   --fs-large: 1.1rem;
+ }
+ body {
+   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+   margin: 0 auto;
+   max-width: 600px;
+   padding: 1rem;
+   line-height: 1.4;
+   background:#f9f9f9;
+   color:#111;
+ }
+ h1 { font-size:1.25rem; margin-top:0; }
+ fieldset { border:1px solid #ccc; margin-bottom:1rem; padding:1rem; background:#fff; }
+ label { display:block; margin-bottom:0.25rem; font-weight:600; }
+ input[type="number"] {
+   width:100%;
+   padding:0.4rem;
+   font-size:1rem;
+   box-sizing:border-box;
+ }
+ button {
+   margin-top:0.5rem;
+   padding:0.5rem 0.75rem;
+   font-size:1rem;
+ }
+ #fx_status {
+   display:block;
+   margin-top:0.25rem;
+   font-size:0.8rem;
+   color:#555;
+   min-height:1.2em;
+ }
+ table {
+   width:100%;
+   border-collapse:collapse;
+   margin-top:1rem;
+   background:#fff;
+ }
+ th, td {
+   border:1px solid #ccc;
+   padding:var(--pad);
+   text-align:right;
+   font-variant-numeric: tabular-nums;
+ }
+ th:nth-child(1), td:nth-child(1) { text-align:left; }
+ thead th {
+   background:#eee;
+   font-size:var(--fs-large);
+ }
+ tfoot td {
+   font-size:0.8rem;
+   text-align:left;
+   border:none;
+   padding-top:1rem;
+ }
+ .note { font-size:0.8rem; color:#555; margin-top:0.5rem; }
+</style>
+</head>
+<body>
+<h1>Preisrechner EUR ↔ CHF</h1>
+
+<fieldset>
+  <label for="price_eur">Bruttopreis (EUR, inkl. dt. MwSt.)</label>
+  <input id="price_eur" type="number" step="0.01" inputmode="decimal" placeholder="z.B. 1000">
+  
+  <label for="vat_de">Deutsche MwSt. %</label>
+  <input id="vat_de" type="number" step="0.01" inputmode="decimal" value="19">
+  
+  <label for="vat_ch">Schweizer MwSt. %</label>
+  <input id="vat_ch" type="number" step="0.01" inputmode="decimal" value="8.1">
+  
+  <label for="fx">Wechselkurs EUR → CHF</label>
+  <input id="fx" type="number" step="0.0001" inputmode="decimal" placeholder="z.B. 0.97">
+  
+  <button type="button" id="btn_fx">Aktuellen Wechselkurs laden</button>
+  <span id="fx_status" aria-live="polite"></span>
+  
+  <div class="note">Dezimaltrennzeichen: Punkt oder Komma möglich.</div>
+</fieldset>
+
+<table aria-describedby="note">
+  <thead>
+    <tr>
+      <th>Szenario</th>
+      <th>EUR</th>
+      <th>CHF</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1) DE Brutto (inkl. dt. MwSt.)</td>
+      <td id="z1_eur">–</td>
+      <td id="z1_chf">–</td>
+    </tr>
+    <tr>
+      <td>• DE MwSt.-Betrag (enthalten in Zeile&nbsp;1)</td>
+      <td id="zDEvat_eur">–</td>
+      <td id="zDEvat_chf">–</td>
+    </tr>
+    <tr>
+      <td>2) DE Brutto + CH MwSt. (Import ohne Rückerst.)</td>
+      <td id="z2_eur">–</td>
+      <td id="z2_chf">–</td>
+    </tr>
+    <tr>
+      <td>• CH MwSt.-Betrag (Netto-Basis; gilt für Zeilen&nbsp;2&nbsp;&amp;&nbsp;4)</td>
+      <td id="zCHvat_eur">–</td>
+      <td id="zCHvat_chf">–</td>
+    </tr>
+    <tr>
+      <td>3) Netto (ohne MwSt.)</td>
+      <td id="z3_eur">–</td>
+      <td id="z3_chf">–</td>
+    </tr>
+    <tr>
+      <td>4) Netto + CH MwSt. (Import mit Rückerst.)</td>
+      <td id="z4_eur">–</td>
+      <td id="z4_chf">–</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3" id="note">
+      Hinweis: CH MwSt. wird stets auf den Nettobetrag berechnet. Beträge in EUR in den Zeilen 2 &amp; 4 dienen nur der Vergleichbarkeit; bezahlt wird CH MwSt. in CHF.
+    </td></tr>
+  </tfoot>
+</table>
+
+<script>
+(function(){
+  const els = {
+    price_eur: document.getElementById('price_eur'),
+    vat_de: document.getElementById('vat_de'),
+    vat_ch: document.getElementById('vat_ch'),
+    fx: document.getElementById('fx'),
+    btn_fx: document.getElementById('btn_fx'),
+    fx_status: document.getElementById('fx_status'),
+    z1_eur: document.getElementById('z1_eur'),
+    z1_chf: document.getElementById('z1_chf'),
+    zDEvat_eur: document.getElementById('zDEvat_eur'),
+    zDEvat_chf: document.getElementById('zDEvat_chf'),
+    z2_eur: document.getElementById('z2_eur'),
+    z2_chf: document.getElementById('z2_chf'),
+    zCHvat_eur: document.getElementById('zCHvat_eur'),
+    zCHvat_chf: document.getElementById('zCHvat_chf'),
+    z3_eur: document.getElementById('z3_eur'),
+    z3_chf: document.getElementById('z3_chf'),
+    z4_eur: document.getElementById('z4_eur'),
+    z4_chf: document.getElementById('z4_chf')
+  };
+
+  // Restore last values from localStorage (if any)
+  ['vat_de','vat_ch','fx','price_eur'].forEach(id=>{
+    const v = localStorage.getItem('pc_'+id);
+    if(v!==null) els[id].value = v;
+  });
+
+  function parseNum(str){
+    if(str==null) return NaN;
+    str = String(str).trim().replace(',','.');
+    const n = parseFloat(str);
+    return isFinite(n)?n:NaN;
+  }
+
+  function fmt(n, currency){
+    if(!isFinite(n)) return '–';
+    const opts = {minimumFractionDigits:2, maximumFractionDigits:2};
+    return new Intl.NumberFormat(undefined, opts).format(n) + (currency?'\u00a0'+currency:'');
+  }
+
+  function calc(){
+    const B = parseNum(els.price_eur.value);
+    const dPercent = parseNum(els.vat_de.value);
+    const sPercent = parseNum(els.vat_ch.value);
+    const fx = parseNum(els.fx.value);
+
+    // Save
+    localStorage.setItem('pc_price_eur', els.price_eur.value);
+    localStorage.setItem('pc_vat_de', els.vat_de.value);
+    localStorage.setItem('pc_vat_ch', els.vat_ch.value);
+    localStorage.setItem('pc_fx', els.fx.value);
+
+    // Basic validation
+    if(!(B>=0) || !(dPercent>=0) || !(sPercent>=0) || !(fx>0)){
+      // Show blanks
+      [
+        'z1_eur','z1_chf','zDEvat_eur','zDEvat_chf',
+        'z2_eur','z2_chf','zCHvat_eur','zCHvat_chf',
+        'z3_eur','z3_chf','z4_eur','z4_chf'
+      ].forEach(id=>{els[id].textContent='–';});
+      return;
+    }
+
+    const d = dPercent/100;
+    const s = sPercent/100;
+
+    const Netto = B / (1 + d);
+    const Netto_CHF = Netto * fx;
+    const BruttoDE_CHF = B * fx;
+
+    const DE_MwSt_EUR = B - Netto;
+    const DE_MwSt_CHF = DE_MwSt_EUR * fx;
+
+    const CH_MwSt_EUR = Netto * s;
+    const CH_MwSt_CHF = Netto_CHF * s;
+
+    // Zeile 1
+    els.z1_eur.textContent = fmt(B,'€');
+    els.z1_chf.textContent = fmt(BruttoDE_CHF,'CHF');
+    // DE MwSt.-Betrag
+    els.zDEvat_eur.textContent = fmt(DE_MwSt_EUR,'€');
+    els.zDEvat_chf.textContent = fmt(DE_MwSt_CHF,'CHF');
+
+    // Zeile 2
+    els.z2_eur.textContent = fmt(B + CH_MwSt_EUR,'€');
+    els.z2_chf.textContent = fmt(BruttoDE_CHF + CH_MwSt_CHF,'CHF');
+    // CH MwSt.-Betrag
+    els.zCHvat_eur.textContent = fmt(CH_MwSt_EUR,'€');
+    els.zCHvat_chf.textContent = fmt(CH_MwSt_CHF,'CHF');
+
+    // Zeile 3
+    els.z3_eur.textContent = fmt(Netto,'€');
+    els.z3_chf.textContent = fmt(Netto_CHF,'CHF');
+
+    // Zeile 4
+    els.z4_eur.textContent = fmt(Netto * (1+s),'€');
+    els.z4_chf.textContent = fmt(Netto_CHF * (1+s),'CHF');
+  }
+
+  ['input','change'].forEach(ev=>{
+    els.price_eur.addEventListener(ev,calc);
+    els.vat_de.addEventListener(ev,calc);
+    els.vat_ch.addEventListener(ev,calc);
+    els.fx.addEventListener(ev,calc);
+  });
+
+  async function loadFx(){
+    els.btn_fx.disabled = true;
+    els.fx_status.textContent = 'Lade Wechselkurs…';
+
+    // Try Frankfurter first
+    let rate = await fetchRate('https://api.frankfurter.dev/latest?from=EUR&to=CHF');
+    let src = 'Frankfurter';
+    // Fallback
+    if(!(rate>0)){
+      rate = await fetchRate('https://api.exchangerate.host/latest?base=EUR&symbols=CHF');
+      src = 'ExchangeRate Host';
+    }
+
+    if(rate>0){
+      // Update field (keep 4 decimals for precision)
+      els.fx.value = rate.toFixed(4);
+      els.fx_status.textContent = 'Kurs geladen von '+src+': 1 € = '+rate.toFixed(4)+' CHF';
+      calc();
+    }else{
+      els.fx_status.textContent = 'Fehler beim Laden des Wechselkurses.';
+    }
+    els.btn_fx.disabled = false;
+  }
+
+  async function fetchRate(url){
+    try{
+      const resp = await fetch(url, {cache:'no-store'});
+      if(!resp.ok) return NaN;
+      const data = await resp.json();
+      // Frankfurter structure: {rates:{CHF:...}}
+      // ExchangeRate Host structure: {rates:{CHF:...}} as well
+      if(data && data.rates && typeof data.rates.CHF === 'number'){
+        return data.rates.CHF;
+      }
+      // Some APIs use quotes or different props; try fallback detection
+      if(data && data.result && data.result.CHF){
+        const v = parseFloat(data.result.CHF);
+        return isFinite(v)?v:NaN;
+      }
+      return NaN;
+    }catch(e){
+      return NaN;
+    }
+  }
+
+  els.btn_fx.addEventListener('click',loadFx);
+
+  calc(); // initial
+})();
+</script>
+</body>
+</html>
